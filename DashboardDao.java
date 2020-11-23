@@ -1,38 +1,24 @@
-package ai.rnt.pins.dao;
 
-import ai.rnt.main.dao.DBConnect;
-import ai.rnt.pins.model.Alerts;
-import ai.rnt.pins.model.Customer;
-import ai.rnt.pins.model.Dashboard;
-import ai.rnt.pins.model.EffortsStatus;
-import ai.rnt.pins.model.MilestoneMaster;
-import ai.rnt.pins.model.ProjectHealth;
-import ai.rnt.pins.model.Project;
-import ai.rnt.pins.util.Util;
+package ai.rnt.tms.dao;
+
 import java.beans.PropertyVetoException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.ParseException;
 import java.util.ArrayList;
-
-import javax.mail.MessagingException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.web.servlet.ModelAndView;
+
+import ai.rnt.main.dao.DBConnect;
+import ai.rnt.pms.model.EmployeeKra;
+import ai.rnt.tms.dao.DashboardDao;
+import ai.rnt.tms.model.Attendance;
+import ai.rnt.tms.model.Timesheet;
 
 public class DashboardDao {
-
-	Customer Customer = new Customer();
-	Project Project = new Project();
-
-	ProjectHealth status = new ProjectHealth();
-
-	Util util = new Util();
 
 	DBConnect dbConnect = new DBConnect();
 	ResultSet rs = null;
@@ -42,90 +28,54 @@ public class DashboardDao {
 
 	private static final Logger log = LogManager.getLogger(DashboardDao.class);
 
-	public Dashboard getEmployeeDetails(int staffID, String password) throws SQLException, PropertyVetoException {
-		Dashboard dashboard = new Dashboard();
-
-		
-		dashboard.setStaffID(staffID);
-		
-		ResultSet rs = null;
-		PreparedStatement statement =null;
-		Connection connection = DBConnect.getConnection();
-		Statement stmt = connection.createStatement();
-		StringBuffer queryString = new StringBuffer();
-		queryString.append("select Staff_ID,F_name,M_Name,L_Name,Manager_ID,email_ID,");
-		queryString.append("(select email_ID from employee_master as em where em.Staff_ID = em1.Manager_ID)");
-		queryString.append(" from  employee_master as em1 where staff_id =?");
-
-		if (!password.equals("for email purpose")) {
-			queryString.append(" and password =?");
-		}
-		try {
-		
-			statement = connection.prepareStatement(queryString.toString());
-			statement.setInt(1, staffID);
-			statement.setString(2, password);
-			rs = statement.executeQuery();
-			while (rs.next()) {
-				dashboard.setFirstName(rs.getString(2));
-				dashboard.setMiddleName(rs.getString(3));
-				dashboard.setLastName(rs.getString(4));
-				dashboard.setManagerID(rs.getInt(5));
-				dashboard.setEmailId(rs.getString(6));
-				dashboard.setManagerEmailID(rs.getString(7));
-				
-			}
-		} finally {
-			
-			rs.close();
-			statement.close();
-			connection.close();
-		}
-		return dashboard;
-	}
-
-	
-	public Boolean checkAdmin(int staffID) throws SQLException, PropertyVetoException {
+	// method for admin check
+	public boolean isValidAdmin(int staffID, int applicationID) throws SQLException, PropertyVetoException {
 
 		boolean isAdmin = false;
 		ResultSet rs = null;
-		PreparedStatement statement =null;
 		Connection connection = DBConnect.getConnection();
+		PreparedStatement statement = null;
 		StringBuffer queryString = new StringBuffer();
 		queryString.append("select count(*) from admin_info where staff_ID=?");
-		try { 
-			
+		queryString.append(" AND Application_ID=?");
+		try {
+
 			statement = connection.prepareStatement(queryString.toString());
 			statement.setInt(1, staffID);
+			statement.setInt(2, applicationID);
 			rs = statement.executeQuery();
-			
+
 			while (rs.next()) {
 				if (rs.getInt(1) > 0) {
 					isAdmin = true;
+
 				}
 			}
 		} finally {
-			
+
 			rs.close();
 			statement.close();
 			connection.close();
 		}
 		return isAdmin;
+
 	}
 
-	public boolean isManager(int staffID) throws SQLException, PropertyVetoException {
-
+	// method for valid Manager
+	public boolean isValidManager(int staffID) throws SQLException, PropertyVetoException {
+		// Manager check
 		boolean isManager = false;
 		ResultSet rs = null;
-		PreparedStatement statement=null;
-		StringBuffer queryString = new StringBuffer();
-		queryString.append("select count(*) from employee_master where manager_ID =?");
 		Connection connection = DBConnect.getConnection();
+		PreparedStatement statement = null;
+		StringBuffer queryString = new StringBuffer();
+		queryString.append("select count(*) from employee_master where manager_ID = ?");
+
 		try {
 			statement = connection.prepareStatement(queryString.toString());
 			statement.setInt(1, staffID);
 			rs = statement.executeQuery();
-			
+
 			while (rs.next()) {
 				if (rs.getInt(1) > 0) {
 					isManager = true;
@@ -133,367 +83,290 @@ public class DashboardDao {
 			}
 		} finally {
 			rs.close();
+
 			statement.close();
 			connection.close();
-			
 		}
 		return isManager;
 	}
 
-	public ArrayList<Project> getTopFourList() throws SQLException, PropertyVetoException {
+	public ArrayList<Attendance> getAttendanceList(int staffID)
+			throws SQLException, PropertyVetoException, ParseException {
+		Attendance attendance = null;
+		ArrayList<Attendance> attendanceList = new ArrayList<Attendance>();
 
-		ArrayList<Project> projectlist = new ArrayList<Project>();
-		Project project = null;
 		ResultSet rs = null;
-		PreparedStatement statement=null;
 		StringBuffer queryString = new StringBuffer();
+		Connection connection = DBConnect.getConnection();
+		PreparedStatement statement = null;
 		queryString.append(
-				"SELECT c.customer_ID,c.company_name,p.project_ID,p.Project_name,p.efforts,p.efforts_unit FROM customer as c INNER JOIN project as p ");
-		queryString.append("WHERE c.Customer_ID = p.Customer_ID ");
-		queryString.append("AND Customer_status = 'A' ");
-		queryString.append("AND project_status = 'A' ");
-		Connection connection = DBConnect.getConnection();
-		
-		try {
-			statement = connection.prepareStatement(queryString.toString());
-			rs = statement.executeQuery();
-			
-			while (rs.next()) {
-				project = new Project();
-				project.setCustomerId(rs.getInt(1));
-				project.setCustomerName(rs.getString(2));
-				project.setProjectId(rs.getInt(3));
-				project.setProjectName(rs.getString(4));
-				if (rs.getString(6).charAt(0) == 'D')
-					project.setEfforts(util.getFinalConverted(rs.getInt(5)));
-				else
-					project.setEfforts(rs.getInt(5));
-
-				projectlist.add(project);
-				
-			}
-
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching list Of Top Four Customer and project :: ", e);
-			// e.printStackTrace();
-		} finally {
-			rs.close();
-			statement.close();
-			connection.close();
-
-		}
-
-		return projectlist;
-	}
-
-	public int getActiveCustomers() throws SQLException, PropertyVetoException {
-
-		int customer = 0;
-		ResultSet rs = null;
-		PreparedStatement statement=null;
-		StringBuffer queryString = new StringBuffer();
-		queryString.append("Select count(*) ");
-		queryString.append("from customer ");
-		queryString.append("where Customer_Status = 'A' AND deleted_by IS NULL");
-		Connection connection = DBConnect.getConnection();
+				"SELECT em.f_Name, em.l_Name, ea.in_date, ea.in_time, ea.out_time FROM employee_attendance AS ea LEFT JOIN employee_master AS em ");
+		queryString.append(" ON ea.staff_ID = em.staff_ID WHERE em.staff_ID= ?");
+		queryString.append(" AND ea.in_date BETWEEN DATE_SUB(CURDATE(),INTERVAL 6 DAY) AND CURDATE() Order by ea.in_date DESC");
 
 		try {
 			statement = connection.prepareStatement(queryString.toString());
+			statement.setInt(1, staffID);
 			rs = statement.executeQuery();
-			
+
 			while (rs.next()) {
-				customer = rs.getInt(1);
+				attendance = new Attendance();
+				attendance.setfName(rs.getString(1));
+				attendance.setlName(rs.getString(2));
+				attendance.setInDate(rs.getDate(3));
+				attendance.setInTime(rs.getTime(4));
+				attendance.setOutTime(rs.getTime(5));
+				attendanceList.add(attendance);
 			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching list Of  Active Customer :: ", e);
-			// e.printStackTrace();
+
+		} catch (NumberFormatException | NullPointerException e) {
 		} finally {
 			rs.close();
 			statement.close();
 			connection.close();
 		}
-		return customer;
+		return attendanceList;
 	}
 
-	public int getActiveProjects() throws SQLException, PropertyVetoException {
+	// SACHIT
+	public ArrayList<Timesheet> getTimesheetSubmittedList(int staffID)
+			throws SQLException, PropertyVetoException, ParseException {
+		Timesheet timesheet = null;
+		ArrayList<Timesheet> taskSubmittedList = new ArrayList<Timesheet>();
 
-		int activeProjects = 0;
 		ResultSet rs = null;
-		PreparedStatement statement=null;
 		StringBuffer queryString = new StringBuffer();
-		queryString.append("Select  count(*) ");
-		queryString.append("from project ");
-		queryString.append("WHERE Project_Status = 'A' AND deleted_by IS NULL");
 		Connection connection = DBConnect.getConnection();
-		Statement stmt = connection.createStatement();
-		
+		PreparedStatement statement = null;
+		queryString.append(
+				"SELECT em.f_Name, em.l_Name, ea.in_date, ea.in_time, ea.out_time FROM employee_attendance AS ea LEFT JOIN employee_master AS em ");
+		queryString.append(" ON ea.staff_ID = em.staff_ID WHERE em.staff_ID= ?");
+		queryString.append(" AND ea.in_date=CURDATE() Order by ea.in_date DESC");
+
 		try {
 			statement = connection.prepareStatement(queryString.toString());
-			rs = statement.executeQuery(queryString.toString());
-			
+			statement.setInt(1, staffID);
+			rs = statement.executeQuery();
+
 			while (rs.next()) {
-				activeProjects = rs.getInt(1);
+				timesheet = new Timesheet();
+				/*
+				 * timesheet.setfName(rs.getString(1)); timesheet.setlName(rs.getString(2));
+				 * timesheet.setInDate(rs.getDate(3));
+				 */
+				timesheet.setInTime(rs.getTime(4));
+				timesheet.setOutTime(rs.getTime(5));
+				taskSubmittedList.add(timesheet);
 			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching list Of Active Project ::  ", e);
-			// e.printStackTrace();
+
+		} catch (NumberFormatException | NullPointerException e) {
 		} finally {
 			rs.close();
 			statement.close();
 			connection.close();
+		}
+		return taskSubmittedList;
+	}
+
+	// sachit
+	public ArrayList<Timesheet> getTimesheetSubmittedListForUser(int staffID)
+			throws SQLException, PropertyVetoException, ParseException {
+		Timesheet timesheet = null;
+		ArrayList<Timesheet> taskSubmittedList = new ArrayList<Timesheet>();
+
+		ResultSet rs = null;
+		StringBuffer queryString = new StringBuffer();
+		Connection connection = DBConnect.getConnection();
+		PreparedStatement statement = null;
+		queryString.append(" SELECT 'Submitted',COUNT(staff_ID) AS total");
+		queryString.append(" FROM emp_timesheets");
+		queryString.append(" WHERE timesheet_date BETWEEN");
+		queryString.append(" DATE_SUB(CURDATE(),INTERVAL 7");
+		queryString.append(" DAY) AND CURDATE() AND status='Submitted' AND staff_ID=?");
+		queryString.append(" UNION ALL");
+		queryString.append(" SELECT 'Approved',COUNT(staff_ID) AS total");
+		queryString.append(" FROM emp_timesheets");
+		queryString.append(" WHERE timesheet_date BETWEEN");
+		queryString.append(" DATE_SUB(CURDATE(),INTERVAL 7");
+		queryString.append(" DAY) AND CURDATE() AND status='Approved' AND staff_ID=" + staffID);
+		log.info(queryString.toString());
+
+		try {
+			statement = connection.prepareStatement(queryString.toString());
+			statement.setInt(1, staffID);
+			rs = statement.executeQuery();
+			while (rs.next()) {
+				timesheet = new Timesheet();
+				timesheet.setStatus(rs.getString(1));
+
+				if (rs.getInt(2) >= 0)
+					timesheet.setCount(rs.getInt(2));
+				taskSubmittedList.add(timesheet);
+			}
+		} catch (NullPointerException e) {
+			log.error("Got Exception while Fetching team kra count ::  " + e);
+
+		} finally {
+			statement.close();
+			connection.close();
+		}
+		return taskSubmittedList;
+	}
+
+	public ArrayList<Timesheet> getTimesheetSubmittedListForManager(int staffID)
+			throws SQLException, PropertyVetoException, ParseException {
+		Timesheet timesheet = null;
+		ArrayList<Timesheet> taskSubmittedList = new ArrayList<Timesheet>();
+
+		ResultSet rs = null;
+		StringBuffer queryString = new StringBuffer();
+		Connection connection = DBConnect.getConnection();
+		PreparedStatement statement = null;
+		queryString.append(" SELECT et.staff_ID, et.status,COUNT(et.status)");
+		queryString.append(" FROM employee_master AS e ");
+		queryString.append(" LEFT JOIN emp_timesheets AS et ON e.Staff_ID=et.staff_ID ");
+		queryString.append(" WHERE et.timesheet_date ");
+		queryString.append(" BETWEEN DATE_SUB( CURDATE( ) , INTERVAL (dayofweek(CURDATE())+6)  DAY ) ");
+		queryString.append(" AND DATE_SUB( CURDATE( ) , INTERVAL (dayofweek(CURDATE())-1)  DAY ) ");
+		queryString.append(" AND e.Manager_ID=?");
+		queryString.append(" GROUP BY et.staff_ID, et.status");
+		log.info(queryString.toString());
+
+		try {
+			statement = connection.prepareStatement(queryString.toString());
+			statement.setInt(1, staffID);
+			rs = statement.executeQuery();
+			while (rs.next()) {
+				timesheet = new Timesheet();
+				timesheet.setStaffID(rs.getInt(1));
+				timesheet.setStatus(rs.getString(2));
+
+				if (rs.getInt(3) >= 0)
+					timesheet.setCount(rs.getInt(3));
+				taskSubmittedList.add(timesheet);
+			}
+		} catch (NullPointerException e) {
+			log.error("Got Exception while Fetching team kra count ::  " + e);
+
+		} finally {
+			statement.close();
+			connection.close();
+		}
+		return taskSubmittedList;
+	}
 	
-		}
-		return activeProjects;
-	}
+	public ArrayList<Timesheet> getTimesheetSubmittedListForManagerCurrentWeek(int staffID)
+			throws SQLException, PropertyVetoException, ParseException {
+		Timesheet timesheet = null;
+		ArrayList<Timesheet> taskSubmittedList = new ArrayList<Timesheet>();
 
-	public ArrayList<Project> getActiveProjectsList() throws SQLException, PropertyVetoException {
-
-		ArrayList<Project> activeprojects = new ArrayList<Project>();
-		Project project = null;
 		ResultSet rs = null;
-		PreparedStatement statement=null;
 		StringBuffer queryString = new StringBuffer();
-
-		queryString.append(
-				" SELECT p.Project_ID,p.Project_Name,c.Company_Name,p.Start_Date,p.Project_Manager,c.Customer_ID ");
-		queryString.append(" FROM project as p inner join customer as c ");
-		queryString.append(" WHERE p.customer_ID=c.Customer_ID AND Project_Status = 'A' AND p.deleted_by IS NULL");
 		Connection connection = DBConnect.getConnection();
+		PreparedStatement statement = null;
+		queryString.append(" SELECT 'Submitted',COUNT(et.staff_ID) AS total FROM employee_master AS e ");
+		queryString.append(" LEFT JOIN emp_timesheets AS et ON e.Staff_ID=et.staff_ID ");
+		queryString.append(" WHERE et.timesheet_date BETWEEN DATE_SUB(CURDATE(),INTERVAL 8 DAY) AND CURDATE() ");
+		queryString.append(" AND et.status='Submitted' AND e.Manager_ID=?  ");
+		queryString.append(" UNION ALL (SELECT 'Approved',");
+		queryString.append(" COUNT(et.staff_ID) AS total FROM employee_master AS e ");
+		queryString.append(" LEFT JOIN emp_timesheets AS et ON e.Staff_ID=et.staff_ID ");
+		queryString.append(" WHERE et.timesheet_date BETWEEN DATE_SUB(CURDATE(),INTERVAL 8 DAY)");
+		queryString.append(" AND CURDATE() AND et.status='Approved' AND e.Manager_ID=");
+		queryString.append(staffID+")");
+		log.info(queryString.toString());
 
 		try {
 			statement = connection.prepareStatement(queryString.toString());
+			statement.setInt(1, staffID);
 			rs = statement.executeQuery();
-			
 			while (rs.next()) {
-				project = new Project();
-				project.setProjectId(rs.getInt(1));
-				project.setProjectName(rs.getString(2));
-				project.setCustomerName(rs.getString(3));
-				project.setStartDate(rs.getDate(4));
-				project.setProjectmanager(rs.getString(5));
-				project.setCustomerId(rs.getInt(6));
-				activeprojects.add(project);
+				timesheet = new Timesheet();
+				
+				timesheet.setStatus(rs.getString(1));
+
+				if (rs.getInt(2) >= 0)
+					timesheet.setCount(rs.getInt(2));
+				taskSubmittedList.add(timesheet);
 			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching list Of Active Project :: ", e);
-			// e.printStackTrace();
+		} catch (NullPointerException e) {
+			log.error("Got Exception while Fetching team kra count ::  " + e);
+
+		} finally {
+			statement.close();
+			connection.close();
+		}
+		return taskSubmittedList;
+	}
+	
+	public ArrayList<Attendance> getAttendanceListforEmp(int staffID)
+			throws SQLException, PropertyVetoException, ParseException {
+		Attendance attendance = null;
+		ArrayList<Attendance> attendanceList = new ArrayList<Attendance>();
+		PreparedStatement statement = null;
+		Connection connection = DBConnect.getConnection();
+		ResultSet rs = null;
+		StringBuffer queryString = new StringBuffer();
+		queryString.append(" SELECT em.f_Name, em.l_Name, ea.in_date, ea.in_time, ea.out_time");
+		queryString.append(" FROM employee_attendance AS ea");
+		queryString.append(" LEFT JOIN employee_master AS em");
+		queryString.append(" ON ea.staff_ID = em.staff_ID");
+		queryString.append(" WHERE em.staff_ID=?");
+
+		queryString.append(" AND ea.in_date=CURRENT_DATE()");
+
+		try {
+			statement = connection.prepareStatement(queryString.toString());
+			statement.setInt(1, staffID);
+			rs = statement.executeQuery();
+
+			while (rs.next()) {
+				attendance = new Attendance();
+				attendance.setfName(rs.getString(1));
+				attendance.setlName(rs.getString(2));
+				attendance.setInDate(rs.getDate(3));
+				attendance.setInTime(rs.getTime(4));
+				attendance.setOutTime(rs.getTime(5));
+				attendanceList.add(attendance);
+			}
+
+		} catch (NumberFormatException | NullPointerException e) {
 		} finally {
 			rs.close();
 			statement.close();
 			connection.close();
+
 		}
-		return activeprojects;
+		return attendanceList;
 	}
 
-	public ArrayList<MilestoneMaster> getUpcomingMilestones() throws SQLException, PropertyVetoException {
-
-		ArrayList<MilestoneMaster> upcomingMilestones = new ArrayList<MilestoneMaster>();
-		MilestoneMaster project = null;
-		ResultSet rs = null;
-		PreparedStatement statement=null;
-		StringBuffer queryString = new StringBuffer();
-
-		queryString.append("select p.Project_Name,m1.milestone,m2.Milestone_Date ");
-		queryString.append("from project as p inner join project_milestone as m2 inner join milestone_master as m1 ");
-		queryString.append(
-				"where m1.milestone_id = m2.milestone_id AND m2.Project_ID = p.Project_ID AND Milestone_Date > CURDATE() ");
-		queryString.append("order by Milestone_Date LIMIT 5");
-
+	public int[] insertAttendance(ArrayList<Attendance> attendanceList)
+			throws SQLException, PropertyVetoException, ParseException {
 		Connection connection = DBConnect.getConnection();
-
+		PreparedStatement stmt = null;
+		int[] result = null;
+		String queryString = "INSERT INTO employee_attendance (staff_id, staff_Name, in_date, in_time, out_time) values (?, ?, ?, ?, ?)";
 		try {
-			statement = connection.prepareStatement(queryString.toString());
-			rs = statement.executeQuery();
-			
-			while (rs.next()) {
-				project = new MilestoneMaster();
-				project.setProjectName(rs.getString(1));
-				project.setMilestoneName(rs.getString(2));
-				project.setMilestoneDate(rs.getDate(3));
-
-				upcomingMilestones.add(project);
-
-
+			stmt = connection.prepareStatement(queryString);
+			connection.setAutoCommit(false);
+			for (Attendance attendance : attendanceList) {
+				stmt.setInt(1, attendance.getStaffID());
+				stmt.setString(2, attendance.getfName());
+				stmt.setDate(3, attendance.getInDate());
+				stmt.setTime(4, attendance.getInTime());
+				stmt.setTime(5, attendance.getOutTime());
+				stmt.addBatch();
 			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching list Of upcoming Milestone :: ", e);
-			// e.printStackTrace();
+			result = stmt.executeBatch();
+			System.out.println("The number of rows inserted: " + result.length);
+			connection.commit();
+		} catch (NumberFormatException | NullPointerException e) {
 		} finally {
-			rs.close();
-			statement.close();
+
+			stmt.close();
 			connection.close();
 		}
-		return upcomingMilestones;
-	}
-
-	public ArrayList<ProjectHealth> getProjectHealth() throws SQLException, PropertyVetoException {
-
-		ArrayList<ProjectHealth> healthStatus = new ArrayList<ProjectHealth>();
-		ProjectHealth projectHealth = null;
-		ResultSet rs = null;
-		PreparedStatement statement=null;
-		StringBuffer queryString = new StringBuffer();
-
-		queryString.append("select p.Project_Name,m.Milestone_Date,m.Milestone_met ");
-		queryString.append("from project as p inner join project_milestone as m ");
-		queryString.append("where p.project_ID=m.project_ID AND Milestone_met='N' AND Milestone_Date < CURDATE()");
-
-		Connection connection = DBConnect.getConnection();
-
-		try {
-			statement = connection.prepareStatement(queryString.toString());
-			rs = statement.executeQuery();
-			
-			while (rs.next()) {
-
-				projectHealth = new ProjectHealth();
-				projectHealth.setProjectName(rs.getString(1));
-				projectHealth.setVariance(util.getduration(rs.getDate(2)));
-				healthStatus.add(projectHealth);
-			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching project Health :: ", e);
-			// e.printStackTrace();
-		} finally {
-			rs.close();
-			statement.close();
-			connection.close();
-		}
-		return healthStatus;
-	}
-
-	public ArrayList<Alerts> getAlerts() throws SQLException, PropertyVetoException {
-
-		ResultSet rs = null;
-		Alerts alerts = null;
-		PreparedStatement statement=null;
-		ArrayList<Alerts> alertslist = new ArrayList<Alerts>();
-		StringBuffer queryString = new StringBuffer();
-
-		queryString.append("select p.Project_Name,c.Company_Name,c.MSA_signed,c.NDA_signed,p.SOW_signed ");
-		queryString.append("from project as p inner join customer as c ");
-		queryString.append("where p.Customer_id = c.Customer_id ");
-		queryString.append("AND (NDA_signed='N' OR MSA_signed='N' OR SOW_signed='N')");
-
-		Connection connection = DBConnect.getConnection();
-
-		try {
-			statement = connection.prepareStatement(queryString.toString());
-			rs = statement.executeQuery();
-			
-			while (rs.next()) {
-
-				alerts = new Alerts();
-
-				if (rs.getString(3).charAt(0) == 'N' || rs.getString(4).charAt(0) == 'N'
-						|| rs.getString(5).charAt(0) == 'N') {
-
-					alerts.setProjectName(rs.getString(1));
-					alerts.setCompanyName(rs.getString(2));
-
-					if (rs.getString(3).charAt(0) == 'N') {
-						alerts.setAlertMSA("MSA not Signed");
-					}
-					if (rs.getString(4).charAt(0) == 'N') {
-						alerts.setAlertNDA("NDA not Signed");
-					}
-					if (rs.getString(5).charAt(0) == 'N') {
-						alerts.setAlertSOW("SOW not Signed");
-					}
-
-				}
-				alertslist.add(alerts);
-			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching Alerts :: ", e);
-			// e.printStackTrace();
-		} finally {
-			rs.close();
-			statement.close();
-			connection.close();
-		}
-		return alertslist;
-	}
-
-	public ArrayList<EffortsStatus> getEffortsStatus() throws SQLException, PropertyVetoException {
-
-		ArrayList<EffortsStatus> healthStatus = new ArrayList<EffortsStatus>();
-		EffortsStatus effortstatus = null;
-		ResultSet rs = null;
-		PreparedStatement statement=null;
-		StringBuffer queryString = new StringBuffer();
-
-		queryString.append("select p.Project_Name, p.Efforts, p.efforts_unit, a.effort_hours, a.effort_minutes ");
-		queryString.append("from project as p INNER JOIN emp_timesheets as a ");
-		queryString.append("where p.Project_ID=a.Project_ID");
-		Connection connection = DBConnect.getConnection();
-
-		try {
-			statement = connection.prepareStatement(queryString.toString());
-			rs = statement.executeQuery();
-			
-			while (rs.next()) {
-
-				effortstatus = new EffortsStatus();
-
-				effortstatus.setProjectName(rs.getString(1));
-				double actual = rs.getInt(4) + (double) (rs.getInt(5)) / 60;
-
-				if (rs.getString(3).charAt(0) == 'D')
-					effortstatus.setFinalEfforts(util.getFinalConverted(rs.getInt(2)));
-
-				if (actual > rs.getInt(2)) {
-					effortstatus.setVariance(util.getefforts(actual, rs.getInt(2)));
-					healthStatus.add(effortstatus);
-				}
-
-			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching Efforts Status ::  ", e);
-			// e.printStackTrace();
-		} finally {
-			rs.close();
-			statement.close();
-			connection.close();
-		}
-		return healthStatus;
-
-	}
-
-	public ModelAndView loadforgotPasswordPage(HttpServletRequest req, HttpServletResponse res)
-			throws SQLException, PropertyVetoException, MessagingException {
-
-		return new ModelAndView("forgotpassword");
-	}
-
-	public String getPassword(String emailID) throws SQLException, PropertyVetoException {
-
-		ResultSet rs = null;
-		PreparedStatement statement=null;
-		Connection connection = DBConnect.getConnection();
-		String password = null;
-		StringBuffer queryString = new StringBuffer();
-		queryString.append(" SELECT Password FROM employee_master WHERE email_ID=?");
-		try {
-
-			statement = connection.prepareStatement(queryString.toString());
-			statement.setString(1, emailID);
-			rs = statement.executeQuery();
-			
-			while (rs.next()) {
-				password = rs.getString(1);
-			}
-		} catch (Exception e) {
-			log.error("Got Exception while Fetching  password :: ", e);
-			// e.printStackTrace();
-		} finally {
-			rs.close();
-			statement.close();
-			connection.close();
-		}
-
-		return password;
-
+		return result;
 	}
 
 }
